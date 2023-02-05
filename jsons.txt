@@ -1,17 +1,35 @@
+//Добавить Сотрудника
+POST http://127.0.0.1:8000/v1/employe
+    BODY:
+        {
+        "ID": 4,  
+        "FIO" : "Koshey Besmertniy",
+        "DEPARTMENT": "Marketiong",
+        "ROLE": "PR Manager"
+        }
+//Вывести сотрудника с ID=3
+GET http://127.0.0.1:8000/v1/employe/3
+
+//Удалить Сотрудника c ID =4 
+DELETE http://127.0.0.1:8000/v1/employe/4
+
+// Добавить ивент
 POST http://127.0.0.1:8000/v1/event
+    BODY:
+        {
+            "ID": 0,
+            "In": "2023-02-07 09:00:05",
+            "Out": "2023-02-07 19:00:05",
+            "EmployeID": 2
+        }
+//Удалить Ивент с ИД 4
+DELETE http://127.0.0.1:8000/v1/event/4
 
-{
-  "ID": 0,
-  "In": "2006-01-02T08:00:05Z",
-  "Out": "2006-01-02T18:00:05Z",
-  "EmployeID": 2
-}
 
-Вывести записи по дням
-SELECT *
-  FROM events
-  WHERE date(ARRIVAL_TIME,'unixepoch') = "2023-02-04";
+//Вывести все Ивенты для Сотрудника c ID 2 в диапазоне c 2023-02-04 по 2023-02-07
+GET http://127.0.0.1:8000/v1/event/2/view/2023-02-04/2023-02-07
 
-SELECT *
-  FROM events
-  WHERE  ARRIVAL_TIME BETWEEN 1136188805 AND 1675497605;
+//Вывести сумарное количество рабочих часов для Сотрудника с ИД 2  в диапазоне c 2023-02-04 по 2023-02-07. 
+GET http://127.0.0.1:8000/v1/event/2/sum/2023-02-04/2023-02-07
+
+

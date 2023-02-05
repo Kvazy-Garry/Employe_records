@@ -67,6 +67,7 @@ func (t *TimeResource) Register(container *restful.Container) {
 	ws.Route(ws.POST("").To(t.createEvent))
 	ws.Route(ws.DELETE("/{event-id}").To(t.removeEvent))
 	ws.Route(ws.GET("/{employe-id}/view/{startDate}/{endDate}").To(t.getEmployeView))
+	ws.Route(ws.GET("/{employe-id}/sum/{startDate}/{endDate}").To(t.getEmployeSumForDateRange))
 
 	container.Add(ws)
 }
@@ -108,7 +109,6 @@ func (t TimeResource) getSlieceEventsByEmpID(eid string) ([]TimeResource, error)
 // Get events for employe from startDate(sdt) to endDate(end)
 func (t TimeResource) getEventsByEmpIDForDate(eid, sdt, edt string) ([]TimeResource, error) {
 	employe_id, _ := strconv.Atoi(eid)
-	fmt.Printf("emp: %d, std: %s, edt: %s\n", employe_id, sdt, edt)
 	// Конвертируем время типа INTEGER в виде Unix.timestampt и возвращаем в виде "2006-01-02 08:00:05"
 	rows, err := DB.Query("select ID, datetime(ARRIVAL_TIME,'unixepoch'), datetime(LEAVING_TIME,'unixepoch'), EMPLOYE_ID FROM events WHERE  EMPLOYE_ID =? AND (date(ARRIVAL_TIME,'unixepoch') BETWEEN ? AND ?)", employe_id, sdt, edt)
 	if err != nil {
@@ -158,6 +158,23 @@ func (t TimeResource) getEmployeView(request *restful.Request, response *restful
 	}
 }
 
+// GET http://localhost:8000/v1/employe/1/sum/{startDate}/{endDate}
+func (t TimeResource) getEmployeSumForDateRange(request *restful.Request, response *restful.Response) {
+	employe_id := request.PathParameter("employe-id")
+	startDate := request.PathParameter("startDate")
+	endDate := request.PathParameter("endDate")
+	fmt.Printf("emp: %s, std: %s, edt: %s\n", employe_id, startDate, endDate)
+	events, err := t.getEventsByEmpIDForDate(employe_id, startDate, endDate)
+
+	if err != nil {
+		log.Println(err)
+		response.AddHeader("Content-Type", "text/plain")
+		response.WriteErrorString(http.StatusNotFound, "Employe could not be found.")
+	} else {
+		response.WriteEntity(sumDuration(events))
+	}
+}
+
 // POST http://localhost:8000/v1/employe/1
 func (t EmployeResource) createEmploye(request *restful.Request, response *restful.Response) {
 	log.Println(request.Request.Body)
@@ -191,13 +208,14 @@ func (t TimeResource) createEvent(request *restful.Request, response *restful.Re
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	log.Println(b.ID, func(bin string) time.Time { time, _ := time.Parse(time.RFC3339, bin); return time }(b.In).Unix(), func(bin string) time.Time { time, _ := time.Parse(time.RFC3339, bin); return time }(b.Out).Unix(), b.EmployeID)
+	fmt.Printf("b.In=%v\n", b.In)
+	fmt.Printf("b.Out=%v\n", b.Out)
+	log.Println(b.ID, func(bin string) time.Time { time, _ := time.Parse("2006-01-02 15:04:05", bin); return time }(b.In).Unix(), func(bin string) time.Time { time, _ := time.Parse("2006-01-02 15:04:05", bin); return time }(b.Out).Unix(), b.EmployeID)
 
 	// Error handling is obvious here. So omitting...
 	statement, _ := DB.Prepare("insert into events (ID, ARRIVAL_TIME, LEAVING_TIME, EMPLOYE_ID) values (?, ?, ?, ?)")
-	//Парсим  строки со временем типа "2006-01-02T08:00:05Z" в тип time.Time и затем конвертируем в Unix.time перед добавлением в базу
-	result, err := statement.Exec(b.ID, func(bin string) time.Time { time, _ := time.Parse(time.RFC3339, bin); return time }(b.In).Unix(), func(bin string) time.Time { time, _ := time.Parse(time.RFC3339, bin); return time }(b.Out).Unix(), b.EmployeID)
+	//Парсим  строки со временем типа ""2006-01-02 15:04:05"" в тип time.Time и затем конвертируем в Unix.time перед добавлением в базу
+	result, err := statement.Exec(b.ID, func(bin string) time.Time { time, _ := time.Parse("2006-01-02 15:04:05", bin); return time }(b.In).Unix(), func(bin string) time.Time { time, _ := time.Parse("2006-01-02 15:04:05", bin); return time }(b.Out).Unix(), b.EmployeID)
 	if err == nil {
 		newID, _ := result.LastInsertId()
 		b.ID = int(newID)
@@ -234,28 +252,31 @@ func (t TimeResource) removeEvent(request *restful.Request, response *restful.Re
 	}
 }
 
+// Calculate Durtion for two time values
 func durateEvent(t1, t2 time.Time) time.Duration {
 	return t2.Sub(t1)
 }
 
+// Calculation sum of working hourse for all events in []TimeResource
 func sumDuration(events []TimeResource) time.Duration {
 	var sumDur time.Duration
 	for _, event := range events {
-		OutTime, _ := time.Parse(time.RFC3339, event.Out)
-		InTime, _ := time.Parse(time.RFC3339, event.In)
-		sumDur = sumDur + durateEvent(OutTime, InTime)
+		//Layout for time.Parse https://yourbasic.org/golang/format-parse-string-time-date-example/
+		OutTime, err := time.Parse("2006-01-02 15:04:05", event.Out)
+		if err != nil {
+			log.Println(err)
+		}
+		InTime, err := time.Parse("2006-01-02 15:04:05", event.In)
+		if err != nil {
+			log.Println(err)
+		}
+		duration := durateEvent(InTime, OutTime)
+		sumDur = sumDur + duration
 	}
-	return sumDur
+	return time.Duration(sumDur.Hours())
 }
 
 func main() {
-	fmt.Println(time.Now())
-	tmz1, _ := time.Parse(time.RFC3339, "2006-01-02T08:00:05Z")
-	tmz2, _ := time.Parse(time.RFC3339, "2006-01-02T18:00:05Z")
-	fmt.Println(tmz1.Unix())
-	fmt.Println(tmz2.Unix())
-	fmt.Println(durateEvent(tmz1, tmz2))
-
 	var err error
 	DB, err = sql.Open("sqlite3", "./employes.db")
 	if err != nil {
