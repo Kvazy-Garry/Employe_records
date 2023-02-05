@@ -7,3 +7,11 @@ POST http://127.0.0.1:8000/v1/event
   "EmployeID": 2
 }
 
+Вывести записи по дням
+SELECT *
+  FROM events
+  WHERE date(ARRIVAL_TIME,'unixepoch') = "2023-02-04";
+
+SELECT *
+  FROM events
+  WHERE  ARRIVAL_TIME BETWEEN 1136188805 AND 1675497605;
