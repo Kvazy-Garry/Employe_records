@@ -66,6 +66,7 @@ func (t *TimeResource) Register(container *restful.Container) {
 	ws.Route(ws.GET("/{employe-id}").To(t.getEventsForEmployeID))
 	ws.Route(ws.POST("").To(t.createEvent))
 	ws.Route(ws.DELETE("/{event-id}").To(t.removeEvent))
+	ws.Route(ws.GET("/{employe-id}/view/{startDate}/{endDate}").To(t.getEmployeView))
 
 	container.Add(ws)
 }
@@ -104,10 +105,50 @@ func (t TimeResource) getSlieceEventsByEmpID(eid string) ([]TimeResource, error)
 	return events, nil
 }
 
+// Get events for employe from startDate(sdt) to endDate(end)
+func (t TimeResource) getEventsByEmpIDForDate(eid, sdt, edt string) ([]TimeResource, error) {
+	employe_id, _ := strconv.Atoi(eid)
+	fmt.Printf("emp: %d, std: %s, edt: %s\n", employe_id, sdt, edt)
+	// Конвертируем время типа INTEGER в виде Unix.timestampt и возвращаем в виде "2006-01-02 08:00:05"
+	rows, err := DB.Query("select ID, datetime(ARRIVAL_TIME,'unixepoch'), datetime(LEAVING_TIME,'unixepoch'), EMPLOYE_ID FROM events WHERE  EMPLOYE_ID =? AND (date(ARRIVAL_TIME,'unixepoch') BETWEEN ? AND ?)", employe_id, sdt, edt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	events := make([]TimeResource, 0)
+	var eventIs TimeResource
+	for rows.Next() {
+		err = rows.Scan(&eventIs.ID, &eventIs.In, &eventIs.Out, &eventIs.EmployeID)
+		if err != nil {
+			return nil, err
+		}
+		log.Println(&eventIs.ID, &eventIs.In, &eventIs.Out, &eventIs.EmployeID)
+		events = append(events, eventIs)
+	}
+	return events, nil
+}
+
 // GET http://localhost:8000/v1/event/1
 func (t TimeResource) getEventsForEmployeID(request *restful.Request, response *restful.Response) {
 	employe_id := request.PathParameter("employe-id")
 	events, err := t.getSlieceEventsByEmpID(employe_id)
+	if err != nil {
+		log.Println(err)
+		response.AddHeader("Content-Type", "text/plain")
+		response.WriteErrorString(http.StatusNotFound, "Employe could not be found.")
+	} else {
+		response.WriteEntity(events)
+	}
+}
+
+// GET http://localhost:8000/v1/employe/1/view/{startDate}/{endDate}
+func (t TimeResource) getEmployeView(request *restful.Request, response *restful.Response) {
+	employe_id := request.PathParameter("employe-id")
+	startDate := request.PathParameter("startDate")
+	endDate := request.PathParameter("endDate")
+	fmt.Printf("emp: %s, std: %s, edt: %s\n", employe_id, startDate, endDate)
+	events, err := t.getEventsByEmpIDForDate(employe_id, startDate, endDate)
+
 	if err != nil {
 		log.Println(err)
 		response.AddHeader("Content-Type", "text/plain")
@@ -195,6 +236,16 @@ func (t TimeResource) removeEvent(request *restful.Request, response *restful.Re
 
 func durateEvent(t1, t2 time.Time) time.Duration {
 	return t2.Sub(t1)
+}
+
+func sumDuration(events []TimeResource) time.Duration {
+	var sumDur time.Duration
+	for _, event := range events {
+		OutTime, _ := time.Parse(time.RFC3339, event.Out)
+		InTime, _ := time.Parse(time.RFC3339, event.In)
+		sumDur = sumDur + durateEvent(OutTime, InTime)
+	}
+	return sumDur
 }
 
 func main() {
