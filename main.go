@@ -109,7 +109,6 @@ func (t TimeResource) getSlieceEventsByEmpID(eid string) ([]TimeResource, error)
 // Get events for employe from startDate(sdt) to endDate(end)
 func (t TimeResource) getEventsByEmpIDForDate(eid, sdt, edt string) ([]TimeResource, error) {
 	employe_id, _ := strconv.Atoi(eid)
-	fmt.Printf("emp: %d, std: %s, edt: %s\n", employe_id, sdt, edt)
 	// Конвертируем время типа INTEGER в виде Unix.timestampt и возвращаем в виде "2006-01-02 08:00:05"
 	rows, err := DB.Query("select ID, datetime(ARRIVAL_TIME,'unixepoch'), datetime(LEAVING_TIME,'unixepoch'), EMPLOYE_ID FROM events WHERE  EMPLOYE_ID =? AND (date(ARRIVAL_TIME,'unixepoch') BETWEEN ? AND ?)", employe_id, sdt, edt)
 	if err != nil {
@@ -253,42 +252,31 @@ func (t TimeResource) removeEvent(request *restful.Request, response *restful.Re
 	}
 }
 
+// Calculate Durtion for two time values
 func durateEvent(t1, t2 time.Time) time.Duration {
 	return t2.Sub(t1)
 }
 
+// Calculation sum of working hourse for all events in []TimeResource
 func sumDuration(events []TimeResource) time.Duration {
 	var sumDur time.Duration
 	for _, event := range events {
-		fmt.Printf("outTime=%v\n", event.Out)
-		fmt.Printf("InTime=%v\n", event.In)
 		//Layout for time.Parse https://yourbasic.org/golang/format-parse-string-time-date-example/
 		OutTime, err := time.Parse("2006-01-02 15:04:05", event.Out)
 		if err != nil {
 			log.Println(err)
 		}
-		fmt.Println(OutTime)
 		InTime, err := time.Parse("2006-01-02 15:04:05", event.In)
 		if err != nil {
 			log.Println(err)
 		}
-		fmt.Println(InTime)
 		duration := durateEvent(InTime, OutTime)
-		fmt.Println(duration)
 		sumDur = sumDur + duration
 	}
 	return time.Duration(sumDur.Hours())
 }
 
 func main() {
-	// fmt.Println(time.Now())
-	// tmz1, _ := time.Parse(time.RFC3339, "2006-01-02T08:00:05Z")
-	// tmz2, _ := time.Parse(time.RFC3339, "2006-01-02T18:00:05Z")
-	// fmt.Println(tmz1.Unix())
-	// fmt.Println(tmz2.Unix())
-	// fmt.Println(durateEvent(tmz1, tmz2))
-	// tmz, _ := time.Parse("2006-01-02 03:04:05", "2023-02-04 08:00:05")
-	// fmt.Printf("time= %v\n", tmz)
 	var err error
 	DB, err = sql.Open("sqlite3", "./employes.db")
 	if err != nil {
